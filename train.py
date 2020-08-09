@@ -2,12 +2,12 @@ import os
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from loss import laplace_log_likelihood
-from dataset import OSICDataset
 from torch.utils.data import DataLoader
-from model import CNN
 import logging
 import numpy as np
+from model import CNN
+from loss import laplace_log_likelihood
+from dataset import OSICDataset
 
 
 def get_logger(log_path=None):
@@ -114,7 +114,7 @@ if __name__ == '__main__':
             best_epoch_num = epoch
             logger.info("Saving current best model at epoch %d", best_epoch_num)
             save_path = os.path.join(model_dir, "model_{:03d}.pth".format(epoch))
-            torch.save(model, save_path)
+            torch.save(model.state_dict(), save_path)
             saved_models.append(save_path)
             if len(saved_models) > save_limit:
                 os.remove(saved_models[0])

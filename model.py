@@ -75,7 +75,7 @@ class ResNet(torch.nn.Module):
         self.reduce = nn.Linear(1000, 124)
         self.regression = nn.Linear(128, 2)
 
-    def forward(input_image, scalars):
+    def forward(self, input_image, scalars):
         out = self.resnet(input_image)
         out = F.relu(self.reduce(out))
         out = torch.cat([out, scalars], dim=1)

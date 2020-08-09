@@ -1,31 +1,58 @@
 import os
 import torch
-from dataset import OSICDataset
+import numpy as np
 from torch.utils.data import DataLoader
-from train import get_logger, get_predictions
+from model import CNN
+from dataset import OSICDataset
+
+
+def make_test_file(test_csv_path, out_csv_path):
+    test_csv = open(test_csv_path, "rt", encoding="utf-8")
+    test_lines = [l.replace("\n", "") for l in test_csv.readlines()[1:]]
+    test_csv.close()
+    out_csv = open(out_csv_path, "wt", encoding="utf-8")
+    out_csv.write("Patient,Weeks,FVC,Percent,Age,Sex,SmokingStatus\n")
+    for i in range(-12, 134):
+        for line in test_lines:
+            Patient, Weeks, FVC, Percent, Age, Sex, SmokingStatus = line.split(",")
+            out_csv.write(",".join([Patient, str(i), "2000", "100", Age, Sex, SmokingStatus]) + "\n")
+    out_csv.close()
 
 
 def load_checkpoint(model_path, device):
-    model = torch.load(model_path, map_location=device)
+    model = CNN()
+    model.load_state_dict(torch.load(model_path))
     model.to(device)
-    for param in model.parameters():
-        param.requires_grad = False
     return model
+
+
+def get_best_checkpoint_path(model_dir):
+    epochs = []
+    model_names = []
+    for model_name in os.listdir(model_dir):
+        epoch = int(model_name.split(".")[0].split("_")[1])
+        epochs.append(epoch)
+        model_names.append(model_name)
+    max_index = np.argmax(epochs)
+    return os.path.join(model_dir, model_names[max_index])
 
 
 if __name__ == '__main__':
     batch_size = 1
     num_workers = 0
     data_dir = r'C:\Users\abdullah\Desktop\projects\osic-pulmonary-fibrosis-progression\data'
-    checkpoint_path = "../result_00/model_070.pth"
-    test_csv_file_path = os.path.join(data_dir, 'test_all.csv')
+    checkpoint_path = get_best_checkpoint_path("../result_00")
+    test_csv_file_path = os.path.join(data_dir, 'test.csv')
+    eval_csv_file_path = os.path.join(data_dir, 'test_all.csv')
     test_data_dir = os.path.join(data_dir, 'test')
     submission_path = '../submission.csv'
+
+    make_test_file(test_csv_file_path, eval_csv_file_path)
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("device : {}".format(device))
 
-    test_dataset = OSICDataset(csv_file_path=test_csv_file_path, data_dir=test_data_dir)
+    test_dataset = OSICDataset(csv_file_path=eval_csv_file_path, data_dir=test_data_dir)
     test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
     model = load_checkpoint(checkpoint_path, device)
@@ -56,3 +83,5 @@ if __name__ == '__main__':
                 logger.write("{}_{:d},{:d},{:d}\n".format(patient, week, fvc, confidence))
 
     logger.close()
+    print("Evaluation finished")
+

@@ -7,6 +7,38 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset
 
 
+def check_dataframe():
+    train_df = pd.read_csv('../input/osic-pulmonary-fibrosis-progression/train.csv')
+    print("train_df :")
+    print(train_df.head())
+    train_df["Weeks"] = (train_df["Weeks"] + 12) / 145
+    train_df["Percent"] = train_df["Percent"] / 100
+    train_df["Age"] = train_df["Age"] / 100
+    train_df["SmokingStatus"].replace({"Currently smokes": 0.0, "Ex-smoker": 0.5, "Never smoked": 1.0}, inplace=True)
+    print(train_df.head())
+
+    unique_patient_df = train_df.drop(['Weeks', 'FVC', 'Percent'], axis=1).drop_duplicates().reset_index(drop=True)
+    unique_patient_df['# visits'] = [train_df['Patient'].value_counts().loc[pid] for pid in
+                                     unique_patient_df['Patient']]
+    print("\nunique_patient_df :")
+    print(unique_patient_df.head())
+    print(unique_patient_df.iloc[0])
+
+    print('Number of data points: ' + str(len(train_df)))
+    print('----------------------')
+
+    for col in train_df.columns:
+        print('{} : {} unique values, {} missing.'.format(col,
+                                                          len(train_df[col].unique()),
+                                                          train_df[col].isna().sum()))
+
+    col = "# visits"
+    print('{} : {} unique values, {} missing.'.format(col,
+                                                      len(unique_patient_df[col].unique()),
+                                                      unique_patient_df[col].isna().sum()))
+    print('----------------------')
+
+
 class OSICDataset(Dataset):
     def __init__(self, csv_file_path, data_dir, transform=None):
         """
