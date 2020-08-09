@@ -30,7 +30,6 @@ def get_predictions(model, data_loader, device, logger=None):
     model.eval()
     with torch.no_grad():
         for eidx, (sample_batch) in enumerate(data_loader):
-            patient_batch = sample_batch['patient']
             image_batch = sample_batch['image'].float().to(device)
             scalars_batch = sample_batch['scalars'].float().to(device)
             labels_batch = sample_batch['labels'].float().to(device)
@@ -41,15 +40,21 @@ def get_predictions(model, data_loader, device, logger=None):
 
 
 max_epoch = 100
+patience = 50
 batch_size = 1
 num_workers = 0
 learning_rate = 1e-3
-root_dir = r'C:\Users\abdullah\Desktop\projects\osic-pulmonary-fibrosis-progression\data'
-train_csv_file_path = os.path.join(root_dir, 'train.csv')
-test_csv_file_path = os.path.join(root_dir, 'test.csv')
-train_data_dir = os.path.join(root_dir, 'train')
-test_data_dir = os.path.join(root_dir, 'test')
-log_path = os.path.join(root_dir, 'log.txt')
+save_limit = 5
+data_dir = r'C:\Users\abdullah\Desktop\projects\osic-pulmonary-fibrosis-progression\data'
+model_dir = "../result_00"
+train_csv_file_path = os.path.join(data_dir, 'train.csv')
+test_csv_file_path = os.path.join(data_dir, 'test.csv')
+train_data_dir = os.path.join(data_dir, 'train')
+test_data_dir = os.path.join(data_dir, 'test')
+log_path = '../log_00.txt'
+
+if not os.path.exists(model_dir):
+    os.makedirs(model_dir)
 
 logger = get_logger(log_path)
 
@@ -68,12 +73,16 @@ model.to(device)
 criterion = nn.MSELoss()
 optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9, weight_decay=1e-3)
 
+bad_counter = 0
+history_errs = [-1000.0]
+saved_models = []
+
+logger.info("Training started.")
 for epoch in range(max_epoch):  # loop over the dataset multiple times
     model.train()
     train_predictions = []
     train_labels = []
     for sample_batch in train_dataloader:
-        patient_batch = sample_batch['patient']
         image_batch = sample_batch['image'].float().to(device)
         scalars_batch = sample_batch['scalars'].float().to(device)
         labels_batch = sample_batch['labels'].float().to(device)
@@ -99,4 +108,25 @@ for epoch in range(max_epoch):  # loop over the dataset multiple times
         loss.item()
     ))
 
-print('Finished Training')
+    if epoch == 0 or test_metric > np.max(history_errs):
+        bad_counter = 0
+        best_epoch_num = epoch
+        logger.info("Saving current best model at epoch %d", best_epoch_num)
+        save_path = os.path.join(model_dir, "model_{:03d}.pth".format(epoch))
+        torch.save(model, save_path)
+        saved_models.append(save_path)
+        if len(saved_models) > save_limit:
+            os.remove(saved_models[0])
+            saved_models = saved_models[1:]
+
+    if test_metric <= np.max(history_errs):
+        bad_counter += 1
+        logger.info("Bad counter: %s", bad_counter)
+
+    history_errs.append(test_metric)
+
+    if bad_counter > patience:
+        logger.info("Early stop at epoch %d" % epoch)
+        break
+
+logger.info('Finished Training')
