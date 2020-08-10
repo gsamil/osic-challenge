@@ -40,7 +40,7 @@ def check_dataframe():
 
 
 class OSICDataset(Dataset):
-    def __init__(self, csv_file_path, data_dir, transform=None):
+    def __init__(self, csv_file_path, data_dir, transform=None, is_test=False):
         """
         Args:
             csv_file_path (string): Path to the csv file with annotations.
@@ -48,10 +48,14 @@ class OSICDataset(Dataset):
             transform (callable, optional): Optional transform to be applied
                 on a sample.
         """
-        self.df = self._convert_df(pd.read_csv(csv_file_path))
+        self.is_test = is_test
         self.data_dir = data_dir
         self.transform = transform
+        self.df = self._convert_df(pd.read_csv(csv_file_path))
         self.image_dict = self._load_image_dict(self.df)
+        self.df = self.df.loc[self.df["Patient"].isin(self.image_dict)]
+        if self.is_test:
+            self.df = self._make_test_dataframe(self.df)
         print("All images are read.")
 
     def __len__(self):
@@ -61,6 +65,10 @@ class OSICDataset(Dataset):
         if torch.is_tensor(idx):
             idx = idx.tolist()
         patient, weeks, fvc, percent, age, sex, smoking_status = self.df.iloc[idx]
+
+        if patient not in self.image_dict:
+            return None
+
         image = self.image_dict[patient]
 
         sample = {
@@ -99,8 +107,22 @@ class OSICDataset(Dataset):
                     image.append(dcm_array)
                 except Exception as e:
                     print("{} {}".format(patient, dcm_name))
-                    raise
+            if len(image) == 0:
+                continue
             image = torch.Tensor(np.stack(image))
             image = F.interpolate(image[None, None, :], size=(64, 64, 64))[0, 0, :]
             image_dict[patient] = image
         return image_dict
+
+    def _make_test_dataframe(self, df):
+        data_test = {"Patient": [], "Weeks": [], "FVC": [], "Percent": [], "Age": [], "Sex": [], "SmokingStatus": []}
+        for i in range(-12, 134):
+            for index, row in df.iterrows():
+                data_test["Patient"].append(row["Patient"])
+                data_test["Weeks"].append(str((i + 12) / 145))
+                data_test["FVC"].append(row["FVC"])
+                data_test["Percent"].append(row["Percent"])
+                data_test["Age"].append(row["Age"])
+                data_test["Sex"].append(row["Sex"])
+                data_test["SmokingStatus"].append(row["SmokingStatus"])
+        return pd.DataFrame(data_test)
