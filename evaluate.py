@@ -9,7 +9,7 @@ from dataset import OSICDataset
 
 def load_checkpoint(model_path, device):
     model = CNN()
-    model.load_state_dict(torch.load(model_path))
+    model.load_state_dict(torch.load(model_path, map_location=torch.device(device)))
     model.to(device)
     return model
 
@@ -37,7 +37,7 @@ if __name__ == '__main__':
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("device : {}".format(device))
 
-    test_dataset = OSICDataset(csv_file_path=test_csv_file_path, data_dir=test_data_dir)
+    test_dataset = OSICDataset(csv_file_path=test_csv_file_path, data_dir=test_data_dir, is_test=True)
     test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
     model = load_checkpoint(checkpoint_path, device)
@@ -57,11 +57,11 @@ if __name__ == '__main__':
             predictions = outputs.data.cpu().detach().numpy()
             labels = labels_batch.cpu().detach().numpy()
             fvc_labels = (labels[:, 0] * (6399 - 827)) + 827
-            fvc_predictions = [int(f) for f in (predictions[:, 0] * (6399 - 827)) + 827]
+            fvc_predictions = [int(round(f)) for f in (predictions[:, 0] * (6399 - 827)) + 827]
             confidence_labels = labels[:, 1]*100
-            confidence_predictions = [int(p) for p in predictions[:, 1]*100]
+            confidence_predictions = [int(round(p)) for p in predictions[:, 1]*100]
             weeks = scalars_batch.cpu().detach().numpy()
-            weeks = [int(w) for w in (weeks[:, 0] * 145) - 12]
+            weeks = [int(round(w)) for w in (weeks[:, 0] * 145) - 12]
 
             for patient, week, fvc, confidence in zip(patient_batch, weeks, fvc_predictions, confidence_predictions):
                 data_test["Patient_Week"].append("{}_{:d}".format(patient, week))
