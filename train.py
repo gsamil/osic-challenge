@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader
 import logging
 import numpy as np
 from model import CNN
-from loss import laplace_log_likelihood
+from loss import laplace_log_likelihood, laplace_log_likelihood_loss
 from dataset import OSICDataset
 
 
@@ -90,11 +90,10 @@ if __name__ == '__main__':
             optimizer.zero_grad()
             outputs = model(image_batch, scalars_batch)
             # loss = criterion(outputs, labels_batch)
-            outputs = outputs.data.cpu().detach().numpy()
-            labels_batch = labels_batch.cpu().detach().numpy()
-            loss = laplace_log_likelihood(labels_batch[:, 0], outputs[:, 0], outputs[:, 1])/(-8.023)
-            train_predictions.extend(outputs)
-            train_labels.extend(labels_batch)
+            loss = laplace_log_likelihood_loss(labels_batch[:, 0], outputs[:, 0], outputs[:, 1])
+            print(loss.item())
+            train_predictions.extend(outputs.data.cpu().detach().numpy())
+            train_labels.extend(labels_batch.cpu().detach().numpy())
             loss.backward()
             optimizer.step()
         train_labels = np.asarray(train_labels)
