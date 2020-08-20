@@ -7,13 +7,19 @@ from torchvision.models import resnet34
 class FFNet(torch.nn.Module):
     def __init__(self):
         super(FFNet, self).__init__()
-        self.hidden = torch.nn.Linear(64 * 64 * 64, 1024)  # hidden layer
-        self.predict = torch.nn.Linear(1024, 2)  # output layer
+        self.ffnet_hidden_dim = 32
+        self.ffnet_out_dim = 2
+        self.ffnet = nn.Sequential(
+            nn.Linear(4, self.ffnet_hidden_dim),
+            nn.ReLU(),
+            # nn.Dropout(0.25),
+            nn.Linear(self.ffnet_hidden_dim, self.ffnet_out_dim),
+            nn.Sigmoid()
+        )
 
     def forward(self, x):
-        x = x.view(-1, 512 * 512 * 512)
-        x = F.relu(self.hidden(x))  # activation function for hidden layer
-        x = self.predict(x)  # linear output
+        # x = x.view(-1, 512 * 512 * 512)
+        x = self.ffnet(x)
         return x
 
 

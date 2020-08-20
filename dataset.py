@@ -98,15 +98,8 @@ class OSICDataset(Dataset):
             if patient in image_dict:
                 continue
             patient_dir = os.path.join(self.data_dir, patient)
-            image = []
-            for dcm_name in os.listdir(patient_dir):
-                try:
-                    dcm_path = os.path.join(patient_dir, dcm_name)
-                    dcm_file = pydicom.dcmread(dcm_path)
-                    dcm_array = np.asarray(dcm_file.pixel_array.astype(np.float64))
-                    image.append(dcm_array)
-                except Exception as e:
-                    print("{} {}".format(patient, dcm_name))
+            scans = load_scan(patient_dir)
+            image = get_pixels_hu(scans)
             if len(image) == 0:
                 continue
             image = torch.Tensor(np.stack(image))
@@ -126,3 +119,52 @@ class OSICDataset(Dataset):
                 data_test["Sex"].append(row["Sex"])
                 data_test["SmokingStatus"].append(row["SmokingStatus"])
         return pd.DataFrame(data_test)
+
+
+def load_scan(path):
+    """
+    Loads scans from a folder and into a list.
+    Parameters: path (Folder path)
+    Returns: slices (List of slices)
+    """
+    slices = [pydicom.read_file(path + '/' + s) for s in os.listdir(path)]
+    slices.sort(key=lambda x: int(x.InstanceNumber))
+    try:
+        slice_thickness = np.abs(slices[0].ImagePositionPatient[2] - slices[1].ImagePositionPatient[2])
+    except:
+        try:
+            slice_thickness = np.abs(slices[0].SliceLocation - slices[1].SliceLocation)
+        except:
+            slice_thickness = None
+    if slice_thickness is not None:
+        for s in slices:
+            s.SliceThickness = slice_thickness
+    return slices
+
+
+def get_pixels_hu(scans):
+    """
+    Converts raw images to Hounsfield Units (HU).
+    Parameters: scans (Raw images)
+    Returns: image (NumPy array)
+    """
+    image = []
+    for s in scans:
+        try:
+            image.append(s.pixel_array)
+        except:
+            print("read error.")
+    if len(image) == 0:
+        return []
+    image = np.stack(image)
+    image = image.astype(np.int16)
+    # Since the scanning equipment is cylindrical in nature and image output is square, we set the out-of-scan pixels to 0
+    image[image == -2000] = 0
+    # HU = m*P + b
+    intercept = scans[0].RescaleIntercept
+    slope = scans[0].RescaleSlope
+    if slope != 1:
+        image = slope * image.astype(np.float64)
+        image = image.astype(np.int16)
+    image += np.int16(intercept)
+    return np.array(image, dtype=np.int16)
