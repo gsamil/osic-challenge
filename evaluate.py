@@ -44,8 +44,6 @@ if __name__ == '__main__':
 
     data_test = {"Patient_Week": [], "FVC": [], "Confidence": []}
 
-    all_predictions = []
-    all_labels = []
     model.eval()
     with torch.no_grad():
         for eidx, (sample_batch) in enumerate(test_dataloader):
@@ -53,13 +51,18 @@ if __name__ == '__main__':
             image_batch = sample_batch['image'].float().to(device)
             scalars_batch = sample_batch['scalars'].float().to(device)
             labels_batch = sample_batch['labels'].float().to(device)
-            outputs = model(image_batch, scalars_batch)
-            predictions = outputs.data.cpu().detach().numpy()
+            fvc_preds, typical_fvc_preds = model(image_batch, scalars_batch)
+            fvc_predictions = fvc_preds.data.cpu().detach().numpy()
+            typical_fvc_predictions = typical_fvc_preds.data.cpu().detach().numpy()
             labels = labels_batch.cpu().detach().numpy()
             fvc_labels = (labels[:, 0] * (6399 - 827)) + 827
-            fvc_predictions = [int(round(f)) for f in (predictions[:, 0] * (6399 - 827)) + 827]
-            confidence_labels = labels[:, 1]*100
-            confidence_predictions = [int(round(p)) for p in predictions[:, 1]*100]
+            fvc_predictions = (fvc_predictions * (6399 - 827)) + 827
+            typical_fvc_predictions = (typical_fvc_predictions * (6399 - 827)) + 827
+            confidence_predictions = np.abs(fvc_predictions - typical_fvc_predictions)
+            fvc_predictions = [int(round(f)) for f in fvc_predictions]
+            typical_fvc_predictions = [int(round(f)) for f in typical_fvc_predictions]
+            confidence_predictions = [int(round(c)) for c in confidence_predictions]
+
             weeks = scalars_batch.cpu().detach().numpy()
             weeks = [int(round(w)) for w in (weeks[:, 0] * 145) - 12]
 

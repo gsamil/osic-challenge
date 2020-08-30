@@ -64,18 +64,19 @@ class OSICDataset(Dataset):
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
-        patient, weeks, fvc, percent, age, sex, smoking_status = self.df.iloc[idx]
+        patient, weeks, fvc, percent, age, sex, smoking_status, typical_fvc = self.df.iloc[idx]
 
         if patient not in self.image_dict:
             return None
 
         image = self.image_dict[patient]
+        # image = np.asarray([0, 0])
 
         sample = {
             'patient': patient,
             'image': image,
             'scalars': np.asarray([weeks, age, sex, smoking_status]).astype(np.float64),
-            'labels': np.asarray([fvc, percent]).astype(np.float64)
+            'labels': np.asarray([fvc, percent, typical_fvc]).astype(np.float64)
         }
 
         if self.transform:
@@ -84,12 +85,14 @@ class OSICDataset(Dataset):
         return sample
 
     def _convert_df(self, df):
+        df['typical_FVC'] = round(df['FVC'] * 100 / df['Percent']).astype(int)
         df["Weeks"] = (df["Weeks"] + 12) / 145
         df["Percent"] = df["Percent"] / 100
         df["Age"] = df["Age"] / 100
         df["SmokingStatus"].replace({"Currently smokes": 0.0, "Ex-smoker": 0.5, "Never smoked": 1.0}, inplace=True)
         df["Sex"].replace({"Male": 0.0, "Female": 1.0}, inplace=True)
         df['FVC'] = (df['FVC'] - 827) / (6399 - 827)
+        df['typical_FVC'] = (df['typical_FVC'] - 827) / (6399 - 827)
         return df
 
     def _load_image_dict(self, df):
@@ -103,12 +106,12 @@ class OSICDataset(Dataset):
             if len(image) == 0:
                 continue
             image = torch.Tensor(np.stack(image))
-            image = F.interpolate(image[None, None, :], size=(64, 64, 64))[0, 0, :]
+            image = F.interpolate(image[None, None, :], size=(32, 128, 128))[0, 0, :]
             image_dict[patient] = image
         return image_dict
 
     def _make_test_dataframe(self, df):
-        data_test = {"Patient": [], "Weeks": [], "FVC": [], "Percent": [], "Age": [], "Sex": [], "SmokingStatus": []}
+        data_test = {"Patient": [], "Weeks": [], "FVC": [], "Percent": [], "Age": [], "Sex": [], "SmokingStatus": [], "typical_FVC": []}
         for i in range(-12, 134):
             for index, row in df.iterrows():
                 data_test["Patient"].append(row["Patient"])
@@ -118,6 +121,7 @@ class OSICDataset(Dataset):
                 data_test["Age"].append(row["Age"])
                 data_test["Sex"].append(row["Sex"])
                 data_test["SmokingStatus"].append(row["SmokingStatus"])
+                data_test["typical_FVC"].append(row["typical_FVC"])
         return pd.DataFrame(data_test)
 
 

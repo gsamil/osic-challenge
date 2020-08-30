@@ -5,7 +5,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 import logging
 import numpy as np
-from model import CNN
+from model import CNN, FFNet
 from loss import laplace_log_likelihood, laplace_log_likelihood_loss
 from dataset import OSICDataset
 
@@ -25,7 +25,8 @@ def get_logger(log_path=None):
 
 
 def get_predictions(model, data_loader, device, logger=None):
-    all_predictions = []
+    all_fvc_predictions = []
+    all_typical_fvc_predictions = []
     all_labels = []
     model.eval()
     with torch.no_grad():
@@ -33,10 +34,11 @@ def get_predictions(model, data_loader, device, logger=None):
             image_batch = sample_batch['image'].float().to(device)
             scalars_batch = sample_batch['scalars'].float().to(device)
             labels_batch = sample_batch['labels'].float().to(device)
-            outputs = model(image_batch, scalars_batch)
-            all_predictions.extend(outputs.data.cpu().detach().numpy())
+            fvc_preds, typical_fvc_preds = model(image_batch, scalars_batch)
+            all_fvc_predictions.extend(fvc_preds.data.cpu().detach().numpy())
+            all_typical_fvc_predictions.extend(typical_fvc_preds.data.cpu().detach().numpy())
             all_labels.extend(labels_batch.cpu().detach().numpy())
-    return np.asarray(all_labels), np.asarray(all_predictions)
+    return np.asarray(all_labels), np.asarray(all_fvc_predictions), np.asarray(all_typical_fvc_predictions)
 
 
 if __name__ == '__main__':
@@ -72,7 +74,10 @@ if __name__ == '__main__':
     model.to(device)
 
     criterion = nn.MSELoss()
-    optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9, weight_decay=1e-3)
+    optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9, weight_decay=1e-4)
+    # optimizer = optim.Adadelta(model.parameters(), lr=learning_rate, rho=0.9, eps=1e-06, weight_decay=1e-3)
+    # optimizer = optim.Adagrad(model.parameters(), lr=learning_rate, lr_decay=0, weight_decay=1e-3, initial_accumulator_value=0, eps=1e-10)
+
 
     bad_counter = 0
     history_errs = [-1000.0]
@@ -81,26 +86,30 @@ if __name__ == '__main__':
     logger.info("Training started.")
     for epoch in range(max_epoch):  # loop over the dataset multiple times
         model.train()
-        train_predictions = []
+        train_fvc_predictions = []
+        train_typical_fvc_predictions = []
         train_labels = []
         for sample_batch in train_dataloader:
             image_batch = sample_batch['image'].float().to(device)
             scalars_batch = sample_batch['scalars'].float().to(device)
             labels_batch = sample_batch['labels'].float().to(device)
             optimizer.zero_grad()
-            outputs = model(image_batch, scalars_batch)
-            # loss = criterion(outputs, labels_batch)
-            loss = laplace_log_likelihood_loss(labels_batch[:, 0], outputs[:, 0], outputs[:, 1])
-            print(loss.item())
-            train_predictions.extend(outputs.data.cpu().detach().numpy())
+            fvc_preds, typical_fvc_preds = model(image_batch, scalars_batch)
+            loss1 = criterion(fvc_preds, labels_batch[:, 0])
+            loss2 = criterion(typical_fvc_preds, labels_batch[:, 2])
+            # loss = laplace_log_likelihood_loss(labels_batch[:, 0], fvc_preds, typical_fvc_preds, device)
+            train_fvc_predictions.extend(fvc_preds.data.cpu().detach().numpy())
+            train_typical_fvc_predictions.extend(typical_fvc_preds.data.cpu().detach().numpy())
             train_labels.extend(labels_batch.cpu().detach().numpy())
+            loss = loss1 + loss2
             loss.backward()
             optimizer.step()
         train_labels = np.asarray(train_labels)
-        train_predictions = np.asarray(train_predictions)
-        train_metric = laplace_log_likelihood(train_labels[:, 0], train_predictions[:, 0], train_predictions[:, 1])
-        test_labels, test_predictions = get_predictions(model, test_dataloader, device)
-        test_metric = laplace_log_likelihood(test_labels[:, 0], test_predictions[:, 0], test_predictions[:, 1])
+        train_fvc_predictions = np.asarray(train_fvc_predictions)
+        train_typical_fvc_predictions = np.asarray(train_typical_fvc_predictions)
+        train_metric = laplace_log_likelihood(train_labels[:, 0], train_fvc_predictions, train_typical_fvc_predictions)
+        test_labels, test_fvc_predictions, test_typical_fvc_predictions = get_predictions(model, test_dataloader, device)
+        test_metric = laplace_log_likelihood(test_labels[:, 0], test_fvc_predictions, test_typical_fvc_predictions)
 
         logger.info('Epoch %d Train %s: %f, Test %s: %f, Loss: %f' % (
             epoch,
