@@ -41,6 +41,12 @@ def get_predictions(model, data_loader, device, logger=None):
     return np.asarray(all_labels), np.asarray(all_fvc_predictions), np.asarray(all_typical_fvc_predictions)
 
 
+def clean_model_dir(model_dir):
+    if os.path.exists(model_dir):
+        for model_name in os.listdir(model_dir):
+            os.remove(os.path.join(model_dir, model_name))
+
+
 if __name__ == '__main__':
     max_epoch = 100
     patience = 50
@@ -48,13 +54,13 @@ if __name__ == '__main__':
     num_workers = 0
     learning_rate = 1e-3
     save_limit = 5
-    data_dir = r'C:\Users\abdullah\Desktop\projects\osic-pulmonary-fibrosis-progression\data'
-    model_dir = "../result_00"
+    data_dir = '../input/osic-pulmonary-fibrosis-progression'
+    model_dir = "./models"
     train_csv_file_path = os.path.join(data_dir, 'train.csv')
     test_csv_file_path = os.path.join(data_dir, 'test.csv')
     train_data_dir = os.path.join(data_dir, 'train')
     test_data_dir = os.path.join(data_dir, 'test')
-    log_path = '../log_train_00.txt'
+    log_path = '../log_train.txt'
 
     if not os.path.exists(model_dir):
         os.makedirs(model_dir)
@@ -101,8 +107,9 @@ if __name__ == '__main__':
             train_fvc_predictions.extend(fvc_preds.data.cpu().detach().numpy())
             train_typical_fvc_predictions.extend(typical_fvc_preds.data.cpu().detach().numpy())
             train_labels.extend(labels_batch.cpu().detach().numpy())
-            loss = loss1 + loss2
-            loss.backward()
+            # loss = loss1 + loss2
+            loss1.backward(retain_graph=True)
+            loss2.backward()
             optimizer.step()
         train_labels = np.asarray(train_labels)
         train_fvc_predictions = np.asarray(train_fvc_predictions)
@@ -111,13 +118,14 @@ if __name__ == '__main__':
         test_labels, test_fvc_predictions, test_typical_fvc_predictions = get_predictions(model, test_dataloader, device)
         test_metric = laplace_log_likelihood(test_labels[:, 0], test_fvc_predictions, test_typical_fvc_predictions)
 
-        logger.info('Epoch %d Train %s: %f, Test %s: %f, Loss: %f' % (
+        logger.info('Epoch %d Train %s: %f, Test %s: %f, Loss1: %f, Loss2: %f' % (
             epoch,
             "LLL",
             train_metric,
             "LLL",
             test_metric,
-            loss.item()
+            loss1.item(),
+            loss2.item()
         ))
 
         if epoch == 0 or test_metric > np.max(history_errs):

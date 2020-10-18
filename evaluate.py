@@ -28,11 +28,15 @@ def get_best_checkpoint_path(model_dir):
 if __name__ == '__main__':
     batch_size = 1
     num_workers = 0
-    data_dir = r'C:\Users\abdullah\Desktop\projects\osic-pulmonary-fibrosis-progression\data'
-    checkpoint_path = get_best_checkpoint_path("../result_00")
+    data_dir = r'../input/osic-pulmonary-fibrosis-progression'
+    temp_dir = r'/kaggle/temp'
+    checkpoint_path = get_best_checkpoint_path("./models")
     test_csv_file_path = os.path.join(data_dir, 'test.csv')
     test_data_dir = os.path.join(data_dir, 'test')
-    submission_path = '../submission.csv'
+    submission_path = './submission.csv'
+
+    if not os.path.exists(temp_dir):
+        os.makedirs(temp_dir)
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("device : {}".format(device))
@@ -58,7 +62,7 @@ if __name__ == '__main__':
             fvc_labels = (labels[:, 0] * (6399 - 827)) + 827
             fvc_predictions = (fvc_predictions * (6399 - 827)) + 827
             typical_fvc_predictions = (typical_fvc_predictions * (6399 - 827)) + 827
-            confidence_predictions = np.abs(fvc_predictions - typical_fvc_predictions)
+            confidence_predictions = fvc_predictions - typical_fvc_predictions
             fvc_predictions = [int(round(f)) for f in fvc_predictions]
             typical_fvc_predictions = [int(round(f)) for f in typical_fvc_predictions]
             confidence_predictions = [int(round(c)) for c in confidence_predictions]
